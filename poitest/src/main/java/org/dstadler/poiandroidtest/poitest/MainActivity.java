@@ -7,8 +7,11 @@ import android.content.Intent;
 import android.net.Uri;
 import android.os.Bundle;
 import android.os.ParcelFileDescriptor;
+import android.util.Log;
 import android.widget.ArrayAdapter;
+import android.widget.Button;
 import android.widget.ListView;
+import android.widget.Toast;
 
 import org.apache.commons.io.output.CountingOutputStream;
 import org.apache.commons.lang3.StringUtils;
@@ -18,6 +21,8 @@ import org.apache.poi.extractor.ExtractorFactory;
 import org.apache.poi.extractor.POITextExtractor;
 import org.apache.poi.hslf.usermodel.HSLFSlide;
 import org.apache.poi.hslf.usermodel.HSLFSlideShow;
+import org.apache.poi.openxml4j.exceptions.InvalidFormatException;
+import org.apache.poi.openxml4j.opc.OPCPackage;
 import org.apache.poi.poifs.crypt.TestSignatureInfo;
 import org.apache.poi.ss.usermodel.Cell;
 import org.apache.poi.ss.usermodel.Hyperlink;
@@ -36,6 +41,7 @@ import org.apache.poi.xwpf.usermodel.Document;
 import org.apache.poi.xwpf.usermodel.XWPFDocument;
 import org.apache.poi.xwpf.usermodel.XWPFParagraph;
 import org.apache.poi.xwpf.usermodel.XWPFRun;
+import org.apache.poi.xwpf.usermodel.XWPFStyles;
 import org.dstadler.poiandroidtest.poitest.dummy.DummyContent;
 import org.dstadler.poiandroidtest.poitest.dummy.DummyItemWithCode;
 import org.dstadler.poiandroidtest.poitest.test.TestIssue28;
@@ -43,6 +49,7 @@ import org.dstadler.poiandroidtest.poitest.test.TestIssue75;
 import org.dstadler.poiandroidtest.poitest.test.TestIssue84;
 import org.dstadler.poiandroidtest.poitest.test.TestIssue89;
 
+import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -55,6 +62,7 @@ import java.util.Map;
 public class MainActivity extends Activity {
 	// Request code for creating a PDF document.
 	private static final int CREATE_DOCX_FILE = 2;
+	private static final int OPEN_WORD_FILE = 3;
 
 	private int idCount = 0;
 
@@ -67,6 +75,14 @@ public class MainActivity extends Activity {
 		System.setProperty("org.apache.poi.javax.xml.stream.XMLInputFactory", "com.fasterxml.aalto.stax.InputFactoryImpl");
 		System.setProperty("org.apache.poi.javax.xml.stream.XMLOutputFactory", "com.fasterxml.aalto.stax.OutputFactoryImpl");
 		System.setProperty("org.apache.poi.javax.xml.stream.XMLEventFactory", "com.fasterxml.aalto.stax.EventFactoryImpl");
+
+		Button openFileButton = findViewById(R.id.open_file_button);
+
+		openFileButton.setOnClickListener(v -> {
+            Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT);
+            intent.setType("application/vnd.openxmlformats-officedocument.wordprocessingml.document");
+            startActivityForResult(intent, OPEN_WORD_FILE);
+        });
 
 		try {
 			// create all the list items
@@ -396,5 +412,36 @@ public class MainActivity extends Activity {
 				}
 			}
 		}
+		else if (requestCode == OPEN_WORD_FILE && resultCode == RESULT_OK) {
+			// Try to extract the data here and log some data about the output
+			// Or, we can even try to write it out to a text file
+
+			Uri uri = resultData.getData();
+            try {
+                InputStream inputStream = this.getContentResolver().openInputStream(uri);
+                assert inputStream != null;
+
+				XWPFDocument doc = new XWPFDocument(OPCPackage.open(inputStream));
+
+				XWPFStyles styles = doc.getStyles();
+				Log.d("MainActivity", styles.getDefaultParagraphStyle().toString());
+
+				for (XWPFParagraph paragraph : doc.getParagraphs()) {
+					Log.d("MainActivity", paragraph.toString());
+					List<XWPFRun> runs = paragraph.getRuns();
+
+					for (XWPFRun run : runs) {
+						Log.d("MainActivity", run.getFontName() + " " + run.getColor() + " " + run.getStyle() + " " + run.getTextPosition());
+					}
+
+					Log.d("MainActivity", paragraph.getStyleID() + " " + paragraph.getStyle());
+				}
+
+                inputStream.close();
+				Toast.makeText(this, "File details written to logcat", Toast.LENGTH_SHORT).show();
+            } catch (IOException | InvalidFormatException e) {
+                throw new RuntimeException(e);
+            }
+        }
 	}
 }
